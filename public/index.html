@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>러닝 플래너 캘린더 · GPT 버전</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">GPT CALENDAR PLANNER</p>
+          <h1>러닝 플래너 캘린더</h1>
+          <p class="muted">
+            PB와 최근 러닝을 함께 넣으면 GPT가 훈련 계획을 만들고,
+            캘린더에서 투두처럼 완료 여부를 기록할 수 있습니다.
+          </p>
+          <div class="inline-pills">
+            <span id="serverStatusPill" class="pill subtle">서버 확인 중</span>
+            <span id="planSourcePill" class="pill subtle">플랜 없음</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <h2>훈련 계획 입력</h2>
+          <form id="planForm" class="plan-form">
+            <div class="form-block">
+              <div class="block-head">
+                <h3>기본 정보</h3>
+                <span class="helper-chip">필수</span>
+              </div>
+              <label>
+                <span>최근 최장 거리 (km)</span>
+                <input type="number" id="currentLongestRunKm" min="1" step="0.5" required />
+              </label>
+            </div>
+
+            <div class="form-block">
+              <div class="block-head">
+                <h3>개인 최고 기록 (PB)</h3>
+                <span class="helper-chip">선택</span>
+              </div>
+              <div class="record-grid">
+                <label>
+                  <span>5K 기록</span>
+                  <input type="text" id="currentBest5kTime" placeholder="예: 00:27:30" />
+                </label>
+                <label>
+                  <span>기록 날짜</span>
+                  <input type="date" id="currentBest5kDate" />
+                </label>
+                <label>
+                  <span>10K 기록</span>
+                  <input type="text" id="currentBest10kTime" placeholder="예: 00:58:00" />
+                </label>
+                <label>
+                  <span>기록 날짜</span>
+                  <input type="date" id="currentBest10kDate" />
+                </label>
+                <label>
+                  <span>하프 기록</span>
+                  <input type="text" id="currentBestHalfTime" placeholder="예: 02:08:00" />
+                </label>
+                <label>
+                  <span>기록 날짜</span>
+                  <input type="date" id="currentBestHalfDate" />
+                </label>
+                <label>
+                  <span>풀 기록</span>
+                  <input type="text" id="currentBestFullTime" placeholder="예: 04:35:00" />
+                </label>
+                <label>
+                  <span>기록 날짜</span>
+                  <input type="date" id="currentBestFullDate" />
+                </label>
+              </div>
+              <p class="field-help">오래된 PB라도 입력할 수 있고, 날짜가 오래됐으면 최근 러닝을 더 크게 반영합니다.</p>
+            </div>
+
+            <div class="form-block">
+              <div class="block-head">
+                <h3>가장 최근 러닝</h3>
+                <span class="helper-chip">추천</span>
+              </div>
+              <div class="two-col">
+                <label>
+                  <span>러닝 날짜</span>
+                  <input type="date" id="recentRunDate" />
+                </label>
+                <label>
+                  <span>거리 (km)</span>
+                  <input type="number" id="recentRunDistanceKm" min="1" step="0.1" placeholder="예: 8.0" />
+                </label>
+              </div>
+              <div class="two-col">
+                <label>
+                  <span>평균 페이스</span>
+                  <input type="text" id="recentRunAveragePace" placeholder="예: 06:25" />
+                </label>
+                <label>
+                  <span>평균 심박수 (bpm)</span>
+                  <input type="number" id="recentRunAverageHeartRateBpm" min="60" max="220" step="1" placeholder="예: 158" />
+                </label>
+              </div>
+              <label>
+                <span>자각 강도 RPE (1~10, 선택)</span>
+                <input type="number" id="recentRunRpe" min="1" max="10" step="1" placeholder="예: 6" />
+              </label>
+              <p class="field-help">거리·페이스·심박을 같이 넣으면 현재 컨디션을 더 보수적으로 해석할 수 있습니다.</p>
+            </div>
+
+            <div class="form-block">
+              <div class="block-head">
+                <h3>목표 대회</h3>
+                <span class="helper-chip">필수</span>
+              </div>
+              <div class="two-col">
+                <label>
+                  <span>목표 대회 날짜</span>
+                  <input type="date" id="goalDate" required />
+                </label>
+                <label>
+                  <span>대회 종목</span>
+                  <select id="raceType">
+                    <option value="10k">10K</option>
+                    <option value="half">하프</option>
+                    <option value="full">풀코스</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="two-col">
+                <label>
+                  <span>목표 시간</span>
+                  <input type="text" id="goalTime" placeholder="예: 01:55:00" required />
+                </label>
+                <label>
+                  <span>주당 훈련 가능 일수</span>
+                  <select id="availableDays">
+                    <option value="2">2일</option>
+                    <option value="3">3일</option>
+                    <option value="4" selected>4일</option>
+                    <option value="5">5일</option>
+                    <option value="6">6일</option>
+                    <option value="7">7일</option>
+                  </select>
+                </label>
+              </div>
+
+              <label>
+                <span>롱런 선호 요일</span>
+                <select id="longRunDay">
+                  <option value="6">토요일</option>
+                  <option value="0" selected>일요일</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="action-stack">
+              <button type="submit" class="primary-btn" id="generateBtn">GPT 훈련표 생성</button>
+              <button type="button" id="seedDemoBtn" class="secondary-btn">데모 데이터 넣기</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2>데이터 관리</h2>
+          <div class="action-stack">
+            <button type="button" id="exportBtn" class="ghost-btn">JSON 내보내기</button>
+            <label class="ghost-btn file-btn">
+              JSON 불러오기
+              <input type="file" id="importInput" accept="application/json" hidden />
+            </label>
+            <button type="button" id="resetBtn" class="danger-btn">초기화</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <h2>진행 현황</h2>
+            <span id="goalSummary" class="pill">목표 없음</span>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <strong id="totalSessions">0</strong>
+              <span>전체 세션</span>
+            </div>
+            <div class="stat-card">
+              <strong id="completedSessions">0</strong>
+              <span>완료</span>
+            </div>
+            <div class="stat-card">
+              <strong id="skippedSessions">0</strong>
+              <span>건너뜀</span>
+            </div>
+            <div class="stat-card">
+              <strong id="completionRate">0%</strong>
+              <span>달성률</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <h2>플랜 메모</h2>
+            <span class="pill subtle">GPT 요약</span>
+          </div>
+          <div id="warningList" class="message-list empty-state">경고/주의가 여기에 표시됩니다.</div>
+        </section>
+      </aside>
+
+      <main class="main">
+        <section class="card calendar-toolbar">
+          <div class="toolbar-left">
+            <button type="button" id="prevMonth" class="nav-btn">‹</button>
+            <h2 id="monthLabel"></h2>
+            <button type="button" id="nextMonth" class="nav-btn">›</button>
+          </div>
+          <div class="toolbar-right">
+            <button type="button" id="todayBtn" class="ghost-btn compact">오늘</button>
+          </div>
+        </section>
+
+        <section class="card calendar-card">
+          <div class="weekday-row">
+            <div>월</div>
+            <div>화</div>
+            <div>수</div>
+            <div>목</div>
+            <div>금</div>
+            <div>토</div>
+            <div>일</div>
+          </div>
+          <div id="calendarGrid" class="calendar-grid"></div>
+        </section>
+
+        <section class="details-layout">
+          <section class="card details-card">
+            <div class="section-head">
+              <h2 id="selectedDateLabel">선택한 날짜</h2>
+              <span id="selectedDateFocus" class="pill subtle">세션 없음</span>
+            </div>
+            <div id="sessionList" class="session-list empty-state">
+              달력에서 날짜를 선택하면 세부 훈련 내용을 볼 수 있습니다.
+            </div>
+          </section>
+
+          <section class="card preview-card">
+            <div class="section-head">
+              <h2>앞으로 7일</h2>
+              <span class="pill subtle">빠른 보기</span>
+            </div>
+            <div id="upcomingList" class="upcoming-list"></div>
+          </section>
+        </section>
+
+        <section class="details-layout lower-layout">
+          <section class="card notes-card">
+            <div class="section-head">
+              <h2>주차별 코치 노트</h2>
+              <span class="pill subtle">주간 포인트</span>
+            </div>
+            <div id="coachNotesList" class="message-list empty-state">플랜을 생성하면 주차별 코멘트가 표시됩니다.</div>
+          </section>
+
+          <section class="card meta-card">
+            <div class="section-head">
+              <h2>플랜 정보</h2>
+              <span class="pill subtle">요약</span>
+            </div>
+            <div id="planMetaSummary" class="meta-summary empty-state">플랜을 생성하면 목표 요약과 페이스가 표시됩니다.</div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay hidden">
+      <div class="loading-card">
+        <div class="spinner"></div>
+        <p>GPT가 훈련표를 만드는 중입니다…</p>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
