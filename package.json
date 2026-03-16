@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Calendar-style running planner with OpenAI-powered training plan generation",
   "type": "module",
+  "engines": {
+  "node": "20.x"
+}
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"
