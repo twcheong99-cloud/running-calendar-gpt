@@ -788,7 +788,7 @@ export async function generatePlanWithGemini({ apiKey, model, profile, context }
   };
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: 'POST',
       headers: {
@@ -823,11 +823,12 @@ export async function generatePlanWithGemini({ apiKey, model, profile, context }
           },
         ],
         generationConfig: {
+          temperature: 0.15,
           responseMimeType: 'application/json',
           responseJsonSchema: schema,
         },
       }),
-    }
+    },
   );
 
   if (!response.ok) {
@@ -837,7 +838,7 @@ export async function generatePlanWithGemini({ apiKey, model, profile, context }
 
   const data = await response.json();
   const rawText = (data?.candidates?.[0]?.content?.parts || [])
-    .map((part) => part.text || '')
+    .map((part) => (typeof part?.text === 'string' ? part.text : ''))
     .join('')
     .trim();
 
@@ -848,6 +849,32 @@ export async function generatePlanWithGemini({ apiKey, model, profile, context }
   const parsed = JSON.parse(rawText);
   return hydratePlanFromModel(parsed, context, model, 'gemini');
 }
+
+export function buildFallbackPlan(profile, context, reason = null) {
+  const warnings = [...context.productWarnings];
+  if (reason) {
+    warnings.unshift(reason);
+  }
+
+  const coachNotes = context.weekBlueprints.map((week) => ({
+    weekNumber: week.weekNumber,
+    note: week.coachNote,
+  }));
+
+  const hydratedSlots = context.slots.map((slot) => createFallbackSessionFromPrescription(slot, profile, context));
+
+  return {
+    meta: {
+      generatedBy: 'fallback',
+      modelName: 'rule-based-generator',
+      sourceLabel: '로컬 규칙 기반',
+    },
+    warnings,
+    coachNotes,
+    slots: sortHydratedSlots(hydratedSlots),
+  };
+}
+
 function createFallbackSessionFromPrescription(slot, profile, context) {
   const prescription = slot.prescription || {};
 
@@ -942,11 +969,11 @@ function hydratePlanFromModel(parsed, context, modelName, generatedBy) {
       generatedBy,
       modelName,
       sourceLabel:
-  generatedBy === 'gemini'
-    ? 'Gemini 생성'
-    : generatedBy === 'openai'
-      ? 'GPT 생성'
-      : '로컬 규칙 기반',
+        generatedBy === 'gemini'
+          ? 'Gemini 생성'
+          : generatedBy === 'openai'
+            ? 'GPT 생성'
+            : '로컬 규칙 기반',
     },
     warnings: Array.isArray(parsed.warnings) ? parsed.warnings.slice(0, 8) : [],
     coachNotes: Array.isArray(parsed.coachNotes) && parsed.coachNotes.length === context.totalWeeks
@@ -1032,17 +1059,22 @@ function buildResponseSchema(context) {
             title: { type: 'string' },
             description: { type: 'string' },
             durationMin: {
-              type: ['integer', 'null'],
-              minimum: 15,
-              maximum: 420,
+              anyOf: [
+                { type: 'integer', minimum: 15, maximum: 420 },
+                { type: 'null' },
+              ],
             },
             distanceKm: {
-              type: ['number', 'null'],
-              minimum: 1,
-              maximum: 60,
+              anyOf: [
+                { type: 'number', minimum: 1, maximum: 60 },
+                { type: 'null' },
+              ],
             },
             targetPace: {
-              type: ['string', 'null'],
+              anyOf: [
+                { type: 'string' },
+                { type: 'null' },
+              ],
             },
             intensity: {
               type: 'string',
