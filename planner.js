@@ -848,7 +848,6 @@ export async function generatePlanWithGemini({ apiKey, model, profile, context }
   const parsed = JSON.parse(rawText);
   return hydratePlanFromModel(parsed, context, model, 'gemini');
 }
-
 function createFallbackSessionFromPrescription(slot, profile, context) {
   const prescription = slot.prescription || {};
 
