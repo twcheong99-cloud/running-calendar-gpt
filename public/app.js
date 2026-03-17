@@ -335,10 +335,12 @@ async function onSubmitPlanForm(event) {
     renderAll();
     queueSaveWorkspace();
 
-    const sourceText =
-      state.appState.planMeta.generatedBy === 'openai'
-        ? 'GPT 훈련표가 생성되었습니다.'
-        : '로컬 규칙 기반 훈련표가 생성되었습니다.';
+  const sourceText =
+  state.appState.planMeta.generatedBy === 'gemini'
+    ? 'Gemini 훈련표가 생성되었습니다.'
+    : state.appState.planMeta.generatedBy === 'openai'
+      ? 'GPT 훈련표가 생성되었습니다.'
+      : '로컬 규칙 기반 훈련표가 생성되었습니다.';
     showToast(sourceText);
   } catch (error) {
     showToast(error.message || '훈련표 생성 중 오류가 발생했습니다.');
@@ -562,10 +564,10 @@ function renderServerStatus() {
   }
 
   if (state.health.gptConnected) {
-    els.serverStatusPill.textContent = `GPT 연결됨 · ${state.health.model}`;
+    els.serverStatusPill.textContent = `Gemini 연결됨 · ${state.health.model}`;
     els.serverStatusPill.className = 'pill success';
   } else {
-    els.serverStatusPill.textContent = 'GPT 키 없음 · 로컬 모드';
+    els.serverStatusPill.textContent = 'Gemini 키 없음 · 로컬 모드';
     els.serverStatusPill.className = 'pill warning';
   }
 }
@@ -641,7 +643,7 @@ function renderPlanSource() {
 
   const generatedBy = state.appState.planMeta.generatedBy;
   els.planSourcePill.textContent = state.appState.planMeta.source;
-  els.planSourcePill.className = generatedBy === 'openai' ? 'pill success' : 'pill warning';
+  els.planSourcePill.className = generatedBy !== 'fallback' ? 'pill success' : 'pill warning';
 }
 
 function renderCalendar() {
