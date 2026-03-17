@@ -725,7 +725,7 @@ function clamp(value, min, max) {
 }
 
 
-export async function generatePlanWithOpenAI({ client, model, profile, context }) {
+export async function generatePlanWithGemini({ apiKey, model, profile, context }) {
   const schema = buildResponseSchema(context);
   const promptPayload = {
     runnerProfile: {
@@ -787,68 +787,67 @@ export async function generatePlanWithOpenAI({ client, model, profile, context }
     },
   };
 
-  const response = await client.responses.create({
-    model,
-    temperature: 0.15,
-    instructions: [
-      'You are an experienced running coach building a calendar-friendly training plan.',
-      'You are not a doctor. If the target looks aggressive, include warnings and reduce progression speed.',
-      'Return only the structured JSON requested by the schema.',
-      'Follow the provided slot prescriptions closely for duration, distance, and pace. Improve the coaching language, workout clarity, and weekly flow, but do not flatten the progression.',
-      'Each slot must be actionable in a todo-list style UI, with concise titles and short success criteria.',
-      'For easy or recovery runs, prioritize time-based prescriptions if exact distance is uncertain.',
-      'For long runs, include distance when practical.',
-      'When PB dates are old, trust the latest run and current background more than the old PB.',
-      'Consider average heart rate and RPE as rough intensity clues, not exact physiology.',
-    ].join(' '),
-    input: [
-      {
-        role: 'user',
-        content: JSON.stringify(promptPayload),
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
       },
-    ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'running_training_plan',
-        strict: true,
-        schema,
-      },
-    },
-  });
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [
+            {
+              text: [
+                'You are an experienced running coach building a calendar-friendly training plan.',
+                'You are not a doctor. If the target looks aggressive, include warnings and reduce progression speed.',
+                'Return only the structured JSON requested by the schema.',
+                'Follow the provided slot prescriptions closely for duration, distance, and pace. Improve the coaching language, workout clarity, and weekly flow, but do not flatten the progression.',
+                'Each slot must be actionable in a todo-list style UI, with concise titles and short success criteria.',
+                'For easy or recovery runs, prioritize time-based prescriptions if exact distance is uncertain.',
+                'For long runs, include distance when practical.',
+                'When PB dates are old, trust the latest run and current background more than the old PB.',
+                'Consider average heart rate and RPE as rough intensity clues, not exact physiology.',
+              ].join(' '),
+            },
+          ],
+        },
+        contents: [
+          {
+            parts: [
+              {
+                text: JSON.stringify(promptPayload),
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseJsonSchema: schema,
+        },
+      }),
+    }
+  );
 
-  const rawText = extractOutputText(response);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API 오류: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  const rawText = (data?.candidates?.[0]?.content?.parts || [])
+    .map((part) => part.text || '')
+    .join('')
+    .trim();
+
   if (!rawText) {
-    throw new Error('OpenAI 응답에서 텍스트를 찾지 못했습니다.');
+    throw new Error('Gemini 응답에서 JSON 텍스트를 찾지 못했습니다.');
   }
 
   const parsed = JSON.parse(rawText);
-  return hydratePlanFromModel(parsed, context, model, 'openai');
+  return hydratePlanFromModel(parsed, context, model, 'gemini');
 }
-
-export function buildFallbackPlan(profile, context, reason = null) {
-  const warnings = [...context.productWarnings];
-  if (reason) {
-    warnings.unshift(reason);
-  }
-
-  const coachNotes = context.weekBlueprints.map((week) => ({
-    weekNumber: week.weekNumber,
-    note: week.coachNote,
-  }));
-
-  const hydratedSlots = context.slots.map((slot) => createFallbackSessionFromPrescription(slot, profile, context));
-
-  return {
-    meta: {
-      generatedBy: 'fallback',
-      modelName: 'rule-based-generator',
-      sourceLabel: '로컬 규칙 기반',
-    },
-    warnings,
-    coachNotes,
-    slots: sortHydratedSlots(hydratedSlots),
-  };
 }
 
 function createFallbackSessionFromPrescription(slot, profile, context) {
@@ -944,7 +943,12 @@ function hydratePlanFromModel(parsed, context, modelName, generatedBy) {
     meta: {
       generatedBy,
       modelName,
-      sourceLabel: generatedBy === 'openai' ? 'GPT 생성' : '로컬 규칙 기반',
+      sourceLabel:
+  generatedBy === 'gemini'
+    ? 'Gemini 생성'
+    : generatedBy === 'openai'
+      ? 'GPT 생성'
+      : '로컬 규칙 기반',
     },
     warnings: Array.isArray(parsed.warnings) ? parsed.warnings.slice(0, 8) : [],
     coachNotes: Array.isArray(parsed.coachNotes) && parsed.coachNotes.length === context.totalWeeks
