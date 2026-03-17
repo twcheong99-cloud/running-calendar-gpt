@@ -335,12 +335,7 @@ async function onSubmitPlanForm(event) {
     renderAll();
     queueSaveWorkspace();
 
-  const sourceText =
-  state.appState.planMeta.generatedBy === 'gemini'
-    ? 'Gemini 훈련표가 생성되었습니다.'
-    : state.appState.planMeta.generatedBy === 'openai'
-      ? 'GPT 훈련표가 생성되었습니다.'
-      : '로컬 규칙 기반 훈련표가 생성되었습니다.';
+    const sourceText = getPlanCreatedToastText(state.appState.planMeta.generatedBy);
     showToast(sourceText);
   } catch (error) {
     showToast(error.message || '훈련표 생성 중 오류가 발생했습니다.');
@@ -634,6 +629,19 @@ function renderSyncStatus() {
   }
 }
 
+function getPlanSourceText(generatedBy, fallbackSource = '') {
+  if (generatedBy === 'gemini') return 'Gemini 생성';
+  if (generatedBy === 'openai') return 'AI 생성(legacy)';
+  if (generatedBy === 'fallback') return '로컬 규칙 기반';
+  return fallbackSource || '알 수 없음';
+}
+
+function getPlanCreatedToastText(generatedBy) {
+  if (generatedBy === 'gemini') return 'Gemini 훈련표가 생성되었습니다.';
+  if (generatedBy === 'openai') return 'AI 훈련표가 생성되었습니다. (legacy)';
+  return '로컬 규칙 기반 훈련표가 생성되었습니다.';
+}
+
 function renderPlanSource() {
   if (!state.appState) {
     els.planSourcePill.textContent = '플랜 없음';
@@ -642,7 +650,7 @@ function renderPlanSource() {
   }
 
   const generatedBy = state.appState.planMeta.generatedBy;
-  els.planSourcePill.textContent = state.appState.planMeta.source;
+  els.planSourcePill.textContent = getPlanSourceText(generatedBy, state.appState.planMeta.source);
   els.planSourcePill.className = generatedBy !== 'fallback' ? 'pill success' : 'pill warning';
 }
 
@@ -892,7 +900,7 @@ function renderPlanMeta() {
     <div class="meta-row"><strong>목표 페이스</strong><span>${escapeHtml(meta.targetPacePerKm)}</span></div>
     <div class="meta-row"><strong>플랜 기간</strong><span>${meta.totalWeeks}주</span></div>
     <div class="meta-row"><strong>훈련 요일</strong><span>${escapeHtml(meta.trainingWeekdays.join(' · '))}</span></div>
-    <div class="meta-row"><strong>생성 방식</strong><span>${escapeHtml(meta.source)}</span></div>
+    <div class="meta-row"><strong>생성 방식</strong><span>${escapeHtml(getPlanSourceText(meta.generatedBy, meta.source))}</span></div>
     <div class="meta-row"><strong>최근 러닝</strong><span>${escapeHtml(renderRecentRunSummary(recentRun))}</span></div>
     ${recentAssessment ? `<div class="meta-note">${escapeHtml(recentAssessment)}</div>` : ''}
   `;
@@ -1016,7 +1024,7 @@ function persistState() {
 
 function setLoading(isLoading) {
   els.generateBtn.disabled = isLoading;
-  els.generateBtn.textContent = isLoading ? '생성 중...' : 'GPT 훈련표 생성';
+  els.generateBtn.textContent = isLoading ? '생성 중...' : 'Gemini 훈련표 생성';
   els.loadingOverlay.classList.toggle('hidden', !isLoading);
 }
 
