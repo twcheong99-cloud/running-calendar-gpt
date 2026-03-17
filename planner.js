@@ -787,67 +787,150 @@ export async function generatePlanWithGemini({ apiKey, model, profile, context }
     },
   };
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
+  const modelName = String(model || 'gemini-2.5-flash').replace(/^models\//, '');
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const systemText = [
+    'You are an experienced running coach building a calendar-friendly training plan.',
+    'You are not a doctor. If the target looks aggressive, include warnings and reduce progression speed.',
+    'Return exactly one JSON object and nothing else.',
+    'Keep all explanatory text in Korean.',
+    'Follow the provided slot prescriptions closely for duration, distance, and pace. Improve the coaching language, workout clarity, and weekly flow, but do not flatten the progression.',
+    'Each slot must be actionable in a todo-list style UI, with concise titles and short success criteria.',
+    'For easy or recovery runs, prioritize time-based prescriptions if exact distance is uncertain.',
+    'For long runs, include distance when practical.',
+    'When PB dates are old, trust the latest run and current background more than the old PB.',
+    'Consider average heart rate and RPE as rough intensity clues, not exact physiology.',
+  ].join(' ');
+
+  const jsonContractExample = {
+    meta: {
+      planStyle: 'balanced',
+      cautionLevel: 'moderate',
+    },
+    warnings: ['경고가 없으면 빈 배열'],
+    coachNotes: [{ weekNumber: 1, note: '1주차 코칭 메모' }],
+    slots: [
+      {
+        slotId: 'S001',
+        sessionType: 'easy',
+        title: '이지런 45분',
+        description: '편안한 대화 강도로 45분 달립니다.',
+        durationMin: 45,
+        distanceKm: null,
+        targetPace: '06:10 ~ 06:25',
+        intensity: 'easy',
+        successCriteria: '호흡이 안정적이고 여유 있게 마치면 성공입니다.',
+      },
+    ],
+  };
+
+  const basePrompt = [
+    '다음 JSON 데이터를 바탕으로 러닝 훈련 계획을 생성하세요.',
+    '출력은 반드시 JSON 객체 하나만 반환하세요.',
+    '아래 계약과 같은 키 구조를 유지하세요.',
+    JSON.stringify(jsonContractExample, null, 2),
+    '모든 slotId를 정확히 한 번씩만 사용하세요.',
+    '주차가 진행되면서 롱런 거리, 품질훈련 볼륨, 이지런 시간 중 하나 이상이 점진적으로 변해야 합니다.',
+    '컷백 주간과 테이퍼 주간은 분명히 더 가볍게 만드세요.',
+    '입력 데이터:',
+    JSON.stringify(promptPayload, null, 2),
+  ].join('\n\n');
+
+  const strictPrompt = [
+    basePrompt,
+    '절대 마크다운 코드펜스를 쓰지 마세요.',
+    '설명 문장이나 서론 없이 JSON 객체만 출력하세요.',
+    'null 이 필요한 필드는 null 을 그대로 쓰세요.',
+  ].join('\n\n');
+
+  function extractCandidateText(data) {
+    return (data?.candidates?.[0]?.content?.parts || [])
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('')
+      .trim();
+  }
+
+  function extractJsonObject(rawText) {
+    const cleaned = String(rawText || '')
+      .trim()
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+
+    try {
+      return JSON.parse(cleaned);
+    } catch (parseError) {
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start !== -1 && end !== -1 && end > start) {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      }
+      throw parseError;
+    }
+  }
+
+  async function requestGemini({ promptText, useSchema }) {
+    const requestBody = {
+      systemInstruction: {
+        parts: [{ text: systemText }],
+      },
+      contents: [
+        {
+          parts: [{ text: promptText }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.15,
+        responseMimeType: 'application/json',
+      },
+    };
+
+    if (useSchema) {
+      requestBody.generationConfig.responseJsonSchema = schema;
+    }
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
       },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: [
-                'You are an experienced running coach building a calendar-friendly training plan.',
-                'You are not a doctor. If the target looks aggressive, include warnings and reduce progression speed.',
-                'Return only the structured JSON requested by the schema.',
-                'Follow the provided slot prescriptions closely for duration, distance, and pace. Improve the coaching language, workout clarity, and weekly flow, but do not flatten the progression.',
-                'Each slot must be actionable in a todo-list style UI, with concise titles and short success criteria.',
-                'For easy or recovery runs, prioritize time-based prescriptions if exact distance is uncertain.',
-                'For long runs, include distance when practical.',
-                'When PB dates are old, trust the latest run and current background more than the old PB.',
-                'Consider average heart rate and RPE as rough intensity clues, not exact physiology.',
-              ].join(' '),
-            },
-          ],
-        },
-        contents: [
-          {
-            parts: [
-              {
-                text: JSON.stringify(promptPayload),
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.15,
-          responseMimeType: 'application/json',
-          responseJsonSchema: schema,
-        },
-      }),
-    },
-  );
+      body: JSON.stringify(requestBody),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API 오류: ${response.status} ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API 오류: ${response.status} ${errorText.slice(0, 500)}`);
+    }
+
+    const data = await response.json();
+    const rawText = extractCandidateText(data);
+
+    if (!rawText) {
+      throw new Error('Gemini 응답에서 텍스트를 찾지 못했습니다.');
+    }
+
+    return extractJsonObject(rawText);
   }
 
-  const data = await response.json();
-  const rawText = (data?.candidates?.[0]?.content?.parts || [])
-    .map((part) => (typeof part?.text === 'string' ? part.text : ''))
-    .join('')
-    .trim();
+  const attempts = [
+    { promptText: basePrompt, useSchema: true },
+    { promptText: strictPrompt, useSchema: false },
+  ];
 
-  if (!rawText) {
-    throw new Error('Gemini 응답에서 JSON 텍스트를 찾지 못했습니다.');
+  let lastError = null;
+
+  for (const attempt of attempts) {
+    try {
+      const parsed = await requestGemini(attempt);
+      return hydratePlanFromModel(parsed, context, modelName, 'gemini');
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  const parsed = JSON.parse(rawText);
-  return hydratePlanFromModel(parsed, context, model, 'gemini');
+  throw new Error(lastError?.message || 'Gemini 생성에 실패했습니다.');
 }
 
 export function buildFallbackPlan(profile, context, reason = null) {
